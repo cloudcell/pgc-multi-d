@@ -8,44 +8,23 @@ def vec2deg(vec):
     n = vec.size
     if n < 2:
         raise ValueError("Vector must have at least 2 dimensions")
+    if np.allclose(vec, 0):
+        return np.zeros(n-1)
     norm = np.linalg.norm(vec)
-    if not np.isclose(norm, 1.0):
-        vec = vec / norm
+    vec_unit = vec / norm
     angles = []
     for i in range(n - 1):
         if i == n - 2:
-            phi = np.arctan2(vec[1], vec[0])
+            phi = np.arctan2(vec_unit[1], vec_unit[0])
             angles.append(np.degrees(phi))
         else:
-            denom = np.linalg.norm(vec[i:])
+            denom = np.linalg.norm(vec_unit[i:])
             if denom == 0:
                 angle = 0.0
             else:
-                angle = np.arccos(vec[i] / denom)
+                angle = np.arccos(vec_unit[i] / denom)
             angles.append(np.degrees(angle))
     return np.array(angles)
-
-def deg2vec(angles):
-    angles = np.asarray(angles, dtype=np.float64)
-    n = angles.size + 1
-    if n < 2:
-        raise ValueError("Angles array must have at least 1 element (for 2D)")
-    theta = np.radians(angles)
-    vec = np.zeros(n)
-    for i in range(n):
-        prod = 1.0
-        for j in range(i):
-            if j == n - 2:
-                prod *= np.sin(theta[-1])
-            else:
-                prod *= np.sin(theta[j])
-        if i == n - 1:
-            vec[i] = prod
-        elif i == n - 2:
-            vec[i] = prod * np.cos(theta[i - 1])
-        else:
-            vec[i] = prod * np.cos(theta[i])
-    return vec
 
 # --- Tkinter GUI with Sliders ---
 class SphericalSliderApp:
@@ -87,16 +66,15 @@ class SphericalSliderApp:
 
     def init_sliders(self, n):
         # Remove old sliders
-        for s in self.vec_sliders:
-            s.destroy()
-        for s in self.ang_sliders:
+        for s in self.vec_sliders + self.ang_sliders:
             s.destroy()
         self.vec_sliders.clear()
         self.ang_sliders.clear()
-        # Default: unit vector along x
+
         self.vec_vals = np.zeros(n)
         self.vec_vals[0] = 1.0
         self.ang_vals = vec2deg(self.vec_vals)
+
         # Vector sliders
         for i in range(n):
             s = tk.Scale(self.vec_frame, from_=-1.0, to=1.0, resolution=0.01, orient=tk.VERTICAL, length=200,
@@ -104,18 +82,16 @@ class SphericalSliderApp:
             s.set(self.vec_vals[i])
             s.pack(side=tk.LEFT, padx=2)
             self.vec_sliders.append(s)
-        # Angle sliders
+
+        # Angle sliders (read-only, update from vectors only)
         for i in range(n-1):
-            # For last angle (phi), use -180 to 180; others use 0 to 180
-            if i == n-2:
-                from_, to_ = -180, 180
-            else:
-                from_, to_ = 0, 180
+            from_, to_ = (-180, 180) if i == n-2 else (0, 180)
             s = tk.Scale(self.ang_frame, from_=from_, to=to_, resolution=0.1, orient=tk.VERTICAL, length=200,
-                         label=f'θ{i+1}' if i < n-2 else 'φ', command=lambda val, idx=i: self.on_ang_slider(idx, val))
+                         label=f'θ{i+1}' if i < n-2 else 'φ')
             s.set(self.ang_vals[i])
             s.pack(side=tk.LEFT, padx=2)
             self.ang_sliders.append(s)
+
         self.update_info()
 
     def on_dim_change(self, val):
@@ -127,37 +103,10 @@ class SphericalSliderApp:
         if self.suppress_callback:
             return
         self.suppress_callback = True
-        # Update vector value
         self.vec_vals[idx] = float(val)
-        norm = np.linalg.norm(self.vec_vals)
-        if norm > 1.0:
-            self.vec_vals = self.vec_vals / norm
-        # Update all angle sliders
         self.ang_vals = vec2deg(self.vec_vals)
         for i, s in enumerate(self.ang_sliders):
-            s.configure(command=None)
             s.set(self.ang_vals[i])
-            s.configure(command=lambda val, idx=i: self.on_ang_slider(idx, val))
-        self.suppress_callback = False
-        self.update_info()
-
-    def on_ang_slider(self, idx, val):
-        if self.suppress_callback:
-            return
-        self.suppress_callback = True
-        # Update only the angle value that was changed
-        self.ang_vals[idx] = float(val)
-        # Update vector
-        self.vec_vals = deg2vec(self.ang_vals)
-        # Normalize (should already be unit, but for safety)
-        norm = np.linalg.norm(self.vec_vals)
-        if not np.isclose(norm, 1.0):
-            self.vec_vals = self.vec_vals / norm
-        # Update all vector sliders
-        for i, s in enumerate(self.vec_sliders):
-            s.configure(command=None)
-            s.set(self.vec_vals[i])
-            s.configure(command=lambda val, idx=i: self.on_vec_slider(idx, val))
         self.suppress_callback = False
         self.update_info()
 
