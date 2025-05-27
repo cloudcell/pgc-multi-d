@@ -130,27 +130,16 @@ class SphericalSliderApp:
         # Update vector value
         self.vec_vals[idx] = float(val)
         norm = np.linalg.norm(self.vec_vals)
-        # Only scale down if norm > 1
         if norm > 1.0:
             self.vec_vals = self.vec_vals / norm
-            # Update all vector sliders to scaled values (except the one being dragged)
-            for i, s in enumerate(self.vec_sliders):
-                if i != idx:
-                    s.configure(command=None)
-                    s.set(self.vec_vals[i])
-                    s.configure(command=lambda val, idx=i: self.on_vec_slider(idx, val))
-            # Also update the one being dragged, so it doesn't stick above the allowed value
-            self.vec_sliders[idx].configure(command=None)
-            self.vec_sliders[idx].set(self.vec_vals[idx])
-            self.vec_sliders[idx].configure(command=lambda val, idx=idx: self.on_vec_slider(idx, val))
-        # Update angles (and update all angle sliders)
+        # Update all angle sliders
         self.ang_vals = vec2deg(self.vec_vals)
         for i, s in enumerate(self.ang_sliders):
             s.configure(command=None)
             s.set(self.ang_vals[i])
             s.configure(command=lambda val, idx=i: self.on_ang_slider(idx, val))
-        self.update_info()
         self.suppress_callback = False
+        self.update_info()
 
     def on_ang_slider(self, idx, val):
         if self.suppress_callback:
@@ -164,14 +153,13 @@ class SphericalSliderApp:
         norm = np.linalg.norm(self.vec_vals)
         if not np.isclose(norm, 1.0):
             self.vec_vals = self.vec_vals / norm
-        # Only update vector sliders
+        # Update all vector sliders
         for i, s in enumerate(self.vec_sliders):
             s.configure(command=None)
             s.set(self.vec_vals[i])
             s.configure(command=lambda val, idx=i: self.on_vec_slider(idx, val))
-        # Do NOT update other angle sliders
-        self.update_info()
         self.suppress_callback = False
+        self.update_info()
 
     def update_info(self):
         self.info_var.set(f"Vector: {np.round(self.vec_vals, 4)}  |  Angles [deg]: {np.round(self.ang_vals, 2)}")
