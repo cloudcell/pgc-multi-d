@@ -13,39 +13,46 @@ def vec2deg(vec):
     norm = np.linalg.norm(vec)
     vec_unit = vec / norm
     angles = []
-    for i in range(n - 1):
-        if i == 0:
-            # Polar angle θ from z-axis
-            theta = np.arccos(vec_unit[-1])
-            angles.append(np.degrees(theta))
-        elif i < n - 2:
-            # For higher dimensions: generalized θ
-            denom = np.linalg.norm(vec_unit[-(i+1):])
-            if denom == 0:
-                angle = 0.0
-            else:
-                angle = np.arccos(vec_unit[-(i+2)] / denom)
-            angles.append(np.degrees(angle))
+    # 1. Azimuthal angle phi (in x-y plane, from x axis)
+    phi = np.arctan2(vec_unit[1], vec_unit[0])
+    angles.append(np.degrees(phi))
+    # 2. Polar angles theta1, theta2, ...
+    for k in range(1, n-1):
+        denom = np.linalg.norm(vec_unit[k:])
+        if denom == 0:
+            angle = 0.0
         else:
-            # Last angle is azimuth φ in xy-plane
-            phi = np.arctan2(vec_unit[1], vec_unit[0])
-            angles.append(np.degrees(phi))
+            angle = np.arccos(vec_unit[k-1] / denom)
+        angles.append(np.degrees(angle))
     return np.array(angles)
 
 def deg2vec(angles):
     angles = np.asarray(angles, dtype=np.float64)
     n = angles.size + 1
-    theta = np.radians(angles)
+    phi = np.radians(angles[0])
+    thetas = np.radians(angles[1:])
     vec = np.zeros(n)
+    # Recursive construction
     for i in range(n):
-        prod = 1.0
-        for j in range(i):
-            prod *= np.sin(theta[j])
-        if i < n - 1:
-            vec[i] = prod * np.cos(theta[i])
-        else:
-            vec[i] = prod
+        val = 1.0
+        if i == 0:
+            val *= np.cos(phi)
+            for t in thetas:
+                val *= np.sin(t)
+        elif i == 1:
+            val *= np.sin(phi)
+            for t in thetas:
+                val *= np.sin(t)
+        elif i < n-1:
+            for j in range(i-1):
+                val *= np.sin(thetas[j])
+            val *= np.cos(thetas[i-1])
+        else:  # last coordinate
+            for t in thetas:
+                val *= np.cos(t)
+        vec[i] = val
     return vec
+
 
 # --- SphericalSliderApp ---
 class SphericalSliderApp:
@@ -80,10 +87,15 @@ class SphericalSliderApp:
         self.info_var = tk.StringVar()
         tk.Label(root, textvariable=self.info_var, fg="blue").pack(side=tk.BOTTOM, fill=tk.X)
 
+        # Reset button (bottom)
+        self.reset_btn = tk.Button(root, text="Reset", command=self.reset)
+        self.reset_btn.pack(side=tk.BOTTOM, fill=tk.X)
+
         # Initialize sliders
         self.vec_sliders = []
         self.ang_sliders = []
         self.init_sliders(self.cur_dim)
+        self.init_vector_from_angles()
 
     def init_sliders(self, n):
         for s in self.vec_sliders + self.ang_sliders:
@@ -97,19 +109,19 @@ class SphericalSliderApp:
 
         for i in range(n):
             s = tk.Scale(self.vec_frame, from_=-1.0, to=1.0, resolution=0.01, orient=tk.VERTICAL, length=200,
-                         label=f'x{i+1}', command=lambda val, idx=i: self.on_vec_slider(idx, val))
+                         label=f'e{i}', command=lambda val, idx=i: self.on_vec_slider(idx, val))
             s.set(self.vec_vals[i])
             s.pack(side=tk.LEFT, padx=2)
             self.vec_sliders.append(s)
 
         for i in range(n-1):
-            # Polar angles (θ): [0,180], Azimuthal angle (φ): [-180,180]
-            if i < n - 2:
-                from_, to_ = (0, 180)
-                label = f'θ{i+1}'
-            else:
+            # First angle is φ (azimuth), rest are θ1, θ2, ...
+            if i == 0:
                 from_, to_ = (-180, 180)
                 label = 'φ'
+            else:
+                from_, to_ = (0, 180)
+                label = f'θ{i}'
             s = tk.Scale(self.ang_frame, from_=from_, to=to_, resolution=0.1, orient=tk.VERTICAL, length=200,
                          label=label, command=lambda val, idx=i: self.on_ang_slider(idx, val))
             s.set(self.ang_vals[i])
@@ -149,6 +161,27 @@ class SphericalSliderApp:
 
     def update_info(self):
         self.info_var.set(f"Vector: {np.round(self.vec_vals, 4)}  |  Angles [deg]: {np.round(self.ang_vals, 2)}")
+
+    def init_vector_from_angles(self):
+        self.vec_vals = deg2vec(self.ang_vals)
+
+    def reset(self):
+        self.suppress_callback = True
+        n = self.cur_dim
+        self.vec_vals = np.zeros(n)
+        self.vec_vals[0] = 1.0  # x axis locked to 1
+        self.ang_vals = vec2deg(self.vec_vals)
+        for i, s in enumerate(self.vec_sliders):
+            s.configure(command=None)
+            s.set(self.vec_vals[i])
+            s.configure(command=lambda val, idx=i: self.on_vec_slider(idx, val))
+        for i, s in enumerate(self.ang_sliders):
+            s.configure(command=None)
+            s.set(self.ang_vals[i])
+            s.configure(command=lambda val, idx=i: self.on_ang_slider(idx, val))
+        self.init_vector_from_angles()
+        self.suppress_callback = False
+        self.update_info()
 
 if __name__ == "__main__":
     root = tk.Tk()
